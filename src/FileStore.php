@@ -4,20 +4,22 @@ namespace Jeekens\Cache;
 
 
 use Exception;
-use Jeekens\Basics\Fs;
+use Jeekens\Std\FileSystem\FileSystem;
 use Throwable;
 use Jeekens\Cache\Exception\StoreException;
+use function array_slice;
 use function call_user_func;
 use function clearstatcache;
 use function compact;
 use function fclose;
 use function file_put_contents;
-use function filesize;
 use function flock;
-use function fopen;
 use function fread;
+use function implode;
 use function is_string;
 use function serialize;
+use function str_split;
+use function substr;
 use function time;
 use function unserialize;
 use const LOCK_EX;
@@ -74,7 +76,7 @@ class FileStore implements StoreInterface
      *
      * @return mixed|null
      *
-     * @throws \Jeekens\Basics\Exception\FileRemoveException
+     * @throws \Jeekens\Std\Exception\FileRemoveException
      */
     public function get(string $key, $default = null)
     {
@@ -86,15 +88,17 @@ class FileStore implements StoreInterface
      *
      * @param string $key
      *
-     * @return bool|mixed
+     * @return bool
      *
-     * @throws \Jeekens\Basics\Exception\FileRemoveException
+     * @throws \Jeekens\Std\Exception\FileRemoveException
      */
     public function delete(string $key)
     {
         $path = $this->getPath($key);
 
-        return Fs::rmFile($path);
+        FileSystem::rmFileEx($path);
+
+        return true;
     }
 
     /**
@@ -105,7 +109,7 @@ class FileStore implements StoreInterface
      *
      * @return mixed
      *
-     * @throws \Jeekens\Basics\Exception\FileRemoveException
+     * @throws \Jeekens\Std\Exception\FileRemoveException
      */
     public function decrement(string $key, int $value = 1)
     {
@@ -119,7 +123,7 @@ class FileStore implements StoreInterface
      *
      * @return bool
      *
-     * @throws \Jeekens\Basics\Exception\FileRemoveException
+     * @throws \Jeekens\Std\Exception\FileRemoveException
      */
     public function exists(string $key)
     {
@@ -182,7 +186,7 @@ class FileStore implements StoreInterface
      *
      * @return mixed
      *
-     * @throws \Jeekens\Basics\Exception\FileRemoveException
+     * @throws \Jeekens\Std\Exception\FileRemoveException
      */
     public function increment(string $key, int $value = 1)
     {
@@ -213,14 +217,16 @@ class FileStore implements StoreInterface
      * @return bool
      *
      * @throws Throwable
+     * @throws \Jeekens\Std\Exception\DirectoryDeletedException
+     * @throws \Jeekens\Std\Exception\FileRemoveException
      */
     public function flush()
     {
-        if (! Fs::directoryExists($this->path , false)) {
+        if (! FileSystem::hasDir($this->path, false)) {
             return false;
         }
 
-        return Fs::cleanupDirectory($this->path);
+        return FileSystem::cleanupDir($this->path);
     }
 
     /**
@@ -252,7 +258,7 @@ class FileStore implements StoreInterface
      */
     protected function ensureCacheDirectoryExists($path)
     {
-        if (! Fs::directoryExists($path, true)) {
+        if (! FileSystem::hasDir($path)) {
             return false;
         }
         return true;
@@ -265,7 +271,7 @@ class FileStore implements StoreInterface
      *
      * @return array
      *
-     * @throws \Jeekens\Basics\Exception\FileRemoveException
+     * @throws \Jeekens\Std\Exception\FileRemoveException
      */
     protected function getPayload($key)
     {
@@ -299,19 +305,21 @@ class FileStore implements StoreInterface
      * @param $path
      *
      * @return bool|string
+     *
+     * @throws \Jeekens\Std\Exception\FileOpenException
      */
     protected function fileGetContent($path)
     {
         $contents = '';
 
-        $handle = fopen($path, 'rb');
+        $handle = FileSystem::openEx($path, 'rb');
 
         if ($handle) {
             try {
                 if (flock($handle, LOCK_SH)) {
                     clearstatcache(true, $path);
 
-                    $contents = fread($handle, filesize($path) ?: 1);
+                    $contents = fread($handle, FileSystem::sizeEx($path) ?: 1);
 
                     flock($handle, LOCK_UN);
                 }

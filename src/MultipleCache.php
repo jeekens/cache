@@ -2,6 +2,10 @@
 
 namespace Jeekens\Cache;
 
+use function array_merge;
+use function array_walk;
+use function call_user_func_array;
+
 /**
  * Class MultipleCache
  *
